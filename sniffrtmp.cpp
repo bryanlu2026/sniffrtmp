@@ -146,14 +146,25 @@ public:
     }
 
 
-    std::string formateM3U()
+    std::string formateM3U(const std::string& streamName = "")
     {
         char m3uBuf[512] = {0};
         std::string strM3u;
+        std::string displayName = streamName;
+
+        if(displayName.empty())
+        {
+            displayName = getLiveId();
+        }
+
+        if(displayName.empty())
+        {
+            displayName = "Stream";
+        }
 
         if(!getRtmpReplayUrl().empty())
         {
-            snprintf(m3uBuf,512,"#EXTINF:0,1, Stream \n%s app=live tcUrl=%s conn= live=1",getRtmpReplayUrl().c_str(),getRtmpReplayUrl().c_str());
+            snprintf(m3uBuf,512,"#EXTINF:0,1, %s \n%s app=live tcUrl=%s conn= live=1",displayName.c_str(),getRtmpReplayUrl().c_str(),getRtmpReplayUrl().c_str());
             strM3u = m3uBuf;
         }
 
@@ -397,8 +408,19 @@ class PacketDistCenter
 private:
     std::unordered_map<uint16_t,std::shared_ptr<RtmpDistInfo> > distByPort;
     std::unordered_map<std::string,int32_t> ffmpegRecordList;
+    bool enableRecord;
 
 public:
+    PacketDistCenter()
+    {
+        enableRecord = false;
+    }
+
+    void setRecordEnable(bool _enable)
+    {
+        enableRecord = _enable;
+    }
+
     void distRecordToffmepg(std::string _rtmpRecordUrl,std::string _strLiveId)
     {
         int32_t recordTime = time(NULL);
@@ -456,7 +478,10 @@ public:
             if(it->second->rtmpHandler->isStopDist() && !it->second->rtmpHandler->getRtmpReplayUrl().empty())
             {
                 //std::cout << "obtain tcurl:" << it->second->rtmpHandler->getRtmpReplayUrl() << std::endl;
-                distRecordToffmepg(it->second->rtmpHandler->getRtmpReplayUrl(),it->second->rtmpHandler->getLiveId());
+                if(enableRecord)
+                {
+                    distRecordToffmepg(it->second->rtmpHandler->getRtmpReplayUrl(),it->second->rtmpHandler->getLiveId());
+                }
 
                 if(m3uFile.good())
                 {
@@ -535,6 +560,7 @@ int main(int argc, char *argv[]) {
     const u_char *packet;
     char *filename = NULL;
     char *interface = NULL;
+    bool enableRecord = false;
     int c;
 
     PacketDistCenter pktDistCenter;
@@ -543,7 +569,7 @@ int main(int argc, char *argv[]) {
     
     std::cout << "sniff rtmp traffic......" << std::endl;
 
-    while ((c = getopt (argc, argv, "i:r:")) != -1) {
+    while ((c = getopt (argc, argv, "i:r:R")) != -1) {
         switch (c) {
             case 'i':
                 interface = optarg;
@@ -551,10 +577,15 @@ int main(int argc, char *argv[]) {
             case 'r':
                 filename = optarg;
                 break;
+            case 'R':
+                enableRecord = true;
+                break;
             default:
                 return 1;
         }
     }
+
+    pktDistCenter.setRecordEnable(enableRecord);
 
     if (filename) {
         handle = pcap_open_offline(filename, errbuf);
@@ -569,7 +600,7 @@ int main(int argc, char *argv[]) {
             return(2);
         }
     } else {
-        fprintf(stderr, "Must specify either -i or -r option\n");
+        fprintf(stderr, "Must specify either -i or -r option (use -R to enable ffmpeg recording)\n");
         return(2);
     }
 
